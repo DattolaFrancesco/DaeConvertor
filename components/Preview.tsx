@@ -8,23 +8,24 @@ import { extractComponents, HIDEABLE_FRONTS, type Component } from "@/lib/compon
 
 const WHITE_PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
-const HIGHLIGHT = 0x2f6bff;
+const HIGHLIGHT = 0xffb89e; // arancio pallido
+const INK = { light: 0x0b0b0b, dark: 0xefede6 };
 
 type Props = {
   xml: string;
+  theme: "light" | "dark";
   highlight: string[];
   onComponents: (list: Component[], furniture: [number, number, number] | null) => void;
   onHover: (id: string | null) => void;
 };
 
-type Saved = { opacity: number; transparent: boolean; depthWrite: boolean; emissive?: THREE.Color };
+type Saved = { opacity: number; transparent: boolean; depthWrite: boolean; color?: THREE.Color; map?: THREE.Texture | null; emissive?: THREE.Color };
 
-export default function Preview({ xml, highlight, onComponents, onHover }: Props) {
+export default function Preview({ xml, theme, highlight, onComponents, onHover }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [wire, setWire] = useState(false);
-  const [showContext, setShowContext] = useState(false);
   const [hideFronts, setHideFronts] = useState(false);
   const [tip, setTip] = useState<Component | null>(null);
 
@@ -90,7 +91,9 @@ export default function Preview({ xml, highlight, onComponents, onHover }: Props
       camera.near = size / 1000;
       camera.far = size * 100;
       camera.updateProjectionMatrix();
-      const grid = new THREE.GridHelper(size * 1.5, 15, 0x888888, 0x444444);
+      const grid = new THREE.GridHelper(size * 1.5, 15, 0x888888, 0x888888);
+      (grid.material as THREE.Material).transparent = true;
+      (grid.material as THREE.Material).opacity = 0.35;
       grid.position.set(center.x, box.min.y, center.z);
       scene.add(grid);
     } catch (e) {
@@ -166,17 +169,17 @@ export default function Preview({ xml, highlight, onComponents, onHover }: Props
         if (!m) return;
         for (const mat of Array.isArray(m) ? m : [m]) applyState(mat, set.size === 0 ? "normal" : on ? "on" : "ghost");
       });
-      if (on && obj.visible) helpers?.add(new THREE.Box3Helper(new THREE.Box3().setFromObject(obj, true), HIGHLIGHT));
+      if (on && obj.visible) helpers?.add(new THREE.Box3Helper(new THREE.Box3().setFromObject(obj, true), INK[theme]));
     }
-  }, [highlight]);
+  }, [highlight, theme]);
 
   useEffect(() => {
     for (const [id, obj] of objectsRef.current) {
       const role = compsRef.current.get(id)?.role;
       obj.visible =
-        (role !== "Ambiente / contesto" || showContext) && !(hideFronts && role && HIDEABLE_FRONTS.includes(role));
+        role !== "Ambiente / contesto" && !(hideFronts && role && HIDEABLE_FRONTS.includes(role));
     }
-  }, [showContext, hideFronts, xml]);
+  }, [hideFronts, xml]);
 
   useEffect(() => {
     modelRef.current?.traverse((o) => {
@@ -195,9 +198,6 @@ export default function Preview({ xml, highlight, onComponents, onHover }: Props
           <input type="checkbox" checked={hideFronts} onChange={(e) => setHideFronts(e.target.checked)} /> Nascondi ante
         </label>
         <label>
-          <input type="checkbox" checked={showContext} onChange={(e) => setShowContext(e.target.checked)} /> Mostra ambiente
-        </label>
-        <label>
           <input type="checkbox" checked={wire} onChange={(e) => setWire(e.target.checked)} /> Wireframe
         </label>
       </div>
@@ -207,7 +207,7 @@ export default function Preview({ xml, highlight, onComponents, onHover }: Props
             <strong>{tip.name}</strong>
             <div>{tip.role}</div>
             <div className="muted">
-              {tip.size.join(" × ")} mm · sp. {tip.thickness}
+              {tip.size.join(" × ")} mm · sp {tip.thickness}
             </div>
           </>
         )}
@@ -221,6 +221,8 @@ function cloneMat(mat: THREE.Material) {
   const c = mat.clone();
   const saved: Saved = { opacity: c.opacity, transparent: c.transparent, depthWrite: c.depthWrite };
   if ("emissive" in c) saved.emissive = (c as THREE.MeshLambertMaterial).emissive.clone();
+  if ("color" in c) saved.color = (c as THREE.MeshLambertMaterial).color.clone();
+  if ("map" in c) saved.map = (c as THREE.MeshLambertMaterial).map;
   c.userData.saved = saved;
   return c;
 }
@@ -231,6 +233,10 @@ function applyState(mat: THREE.Material, state: "normal" | "on" | "ghost") {
   mat.opacity = state === "ghost" ? s.opacity * 0.12 : s.opacity;
   mat.transparent = state === "ghost" ? true : s.transparent;
   mat.depthWrite = state === "ghost" ? false : s.depthWrite;
-  if (s.emissive) (mat as THREE.MeshLambertMaterial).emissive.copy(state === "on" ? new THREE.Color(HIGHLIGHT).multiplyScalar(0.6) : s.emissive);
+  // Evidenziato: colore pieno, senza texture.
+  const m = mat as THREE.MeshLambertMaterial;
+  if (s.color) m.color.copy(state === "on" ? new THREE.Color(HIGHLIGHT) : s.color);
+  if (s.map !== undefined) m.map = state === "on" ? null : s.map;
+  if (s.emissive) m.emissive.copy(state === "on" ? new THREE.Color(HIGHLIGHT).multiplyScalar(0.3) : s.emissive);
   mat.needsUpdate = true;
 }

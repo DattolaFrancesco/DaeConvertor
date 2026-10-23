@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { analyzeCollada, type Analysis } from "@/lib/collada";
 import { groupComponents, type Component, type ComponentGroup } from "@/lib/components";
 import { buildPreventivo } from "@/lib/preventivo";
@@ -50,6 +50,9 @@ export default function Home() {
   const [hover3d, setHover3d] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  // Cambia a ogni caricamento: forza un'anteprima nuova anche se il file è identico al precedente.
+  const [loadId, setLoadId] = useState(0);
   const [exportMsg, setExportMsg] = useState<{ text: string; error?: boolean } | null>(null);
 
   const handleFile = useCallback(async (file: File) => {
@@ -63,6 +66,7 @@ export default function Home() {
       setHover3d(null);
       setSelected(null);
       setExportMsg(null);
+      setLoadId((n) => n + 1);
       setAnalysis(analyzeCollada(file.name, file.size, xml));
     } catch (e) {
       setAnalysis(null);
@@ -71,6 +75,19 @@ export default function Home() {
       setLoading(false);
     }
   }, []);
+
+  // Il tema iniziale lo imposta lo script in layout.tsx (preferenza salvata o di sistema).
+  useEffect(() => {
+    setTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+  }, []);
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try {
+      localStorage.setItem("theme", next);
+    } catch {}
+    setTheme(next);
+  };
 
   const onComponents = useCallback((list: Component[]) => setComponents(list), []);
 
@@ -121,6 +138,13 @@ export default function Home() {
     }
   };
 
+  // Azzera il campo dopo la scelta, così si può ricaricare anche lo stesso file.
+  const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (f) handleFile(f);
+  };
+
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
@@ -130,6 +154,7 @@ export default function Home() {
 
   return (
     <main
+      className={dragging ? "dragging" : ""}
       onDragOver={(e) => {
         e.preventDefault();
         setDragging(true);
@@ -137,35 +162,54 @@ export default function Home() {
       onDragLeave={(e) => e.currentTarget === e.target && setDragging(false)}
       onDrop={onDrop}
     >
-      <header>
-        <h1>DAE Analyzer</h1>
-        <p className="muted">Trascina un file COLLADA (.dae) per vedere i suoi dati principali, i componenti e il modello 3D. Tutto avviene nel browser: il file non viene caricato da nessuna parte.</p>
+      <header className="bar">
+        <h1>
+          DAE<span>/</span>Analyzer
+        </h1>
+        {analysis ? (
+          <div className="file">
+            <strong>{analysis.fileName}</strong>
+            <span className="muted">{formatBytes(analysis.fileSize)}</span>
+          </div>
+        ) : (
+          <div className="tagline">COLLADA → componenti → preventivo · tutto nel browser</div>
+        )}
+        <button className="theme-switch" onClick={toggleTheme} aria-label="Cambia tema" title="Cambia tema">
+          Chiaro
+          <span className="track">
+            <span className="knob" />
+          </span>
+          Scuro
+        </button>
+        {analysis && (
+          <label className="load">
+            <input type="file" accept=".dae" hidden onChange={onPick} />
+            {loading ? "Analisi…" : dragging ? "Rilascia" : "Carica .dae"}
+          </label>
+        )}
       </header>
 
-      <label className={`drop ${dragging ? "over" : ""} ${analysis ? "compact" : ""}`}>
-        <input type="file" accept=".dae" hidden onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
-        {loading ? "Analisi in corso…" : dragging ? "Rilascia qui" : analysis ? "Trascina un altro .dae o clicca per sceglierlo" : "Trascina qui il file .dae oppure clicca per sceglierlo"}
-      </label>
+      {!analysis && (
+        <label className={`drop ${dragging ? "over" : ""}`}>
+          <input type="file" accept=".dae" hidden onChange={onPick} />
+          <strong>{loading ? "Analisi…" : dragging ? "Rilascia" : "Trascina un .dae"}</strong>
+          <span>oppure clicca per sceglierlo</span>
+        </label>
+      )}
 
       {error && <div className="error">{error}</div>}
 
       {analysis && (
         <>
-          <div className="filebar">
-            <div>
-              <strong>{analysis.fileName}</strong>{" "}
-              <span className="muted">{formatBytes(analysis.fileSize)}</span>
-            </div>
-          </div>
 
           <div className="top">
             <div className="left">
               {colorGroups.length > 0 && (
                 <section className="components" onMouseLeave={() => setHovered(null)}>
                   <div className="section-head">
-                    <h2>Componenti per colore e spessore</h2>
+                    <h2>Componenti / colore / spessore</h2>
                     <button className="primary" onClick={exportExcel} disabled={exporting}>
-                      {exporting ? "Preparazione…" : "Esporta preventivo Excel"}
+                      {exporting ? "Preparazione…" : "Esporta preventivo ↓"}
                     </button>
                   </div>
                   {exportMsg && <p className={`export-msg ${exportMsg.error ? "warn" : ""}`}>{exportMsg.text}</p>}
@@ -214,6 +258,7 @@ export default function Home() {
                     .map((cg) => (
                       <div key={cg.family} className="color-group">
                         <div className="color-head">
+                          <span className="label">Colore</span>
                           <strong>{cg.family}</strong>
                           <span className="muted">
                             {pezzi(cg.ids.length)} · {cg.swatches.map((w) => w.material).join(", ")}
@@ -224,7 +269,9 @@ export default function Home() {
                           return (
                             <div key={key} className="thick-group">
                               <div className={`thick-head ${isActive(key, t.ids) ? "active" : ""}`} {...hoverProps(key, t.ids)}>
-                                Spessore <strong>{t.thickness} mm</strong> <span className="muted">· {pezzi(t.ids.length)}</span>
+                                <span className="label">Spessore</span>
+                                <strong>{t.thickness} mm</strong>
+                                <span className="count">{pezzi(t.ids.length)}</span>
                               </div>
                               <RowsTable rows={t.rows} isActive={isActive} hoverProps={hoverProps} />
                             </div>
@@ -246,7 +293,7 @@ export default function Home() {
               )}
             </div>
             <div className="right">
-              <Preview xml={analysis.text} highlight={highlight} onComponents={onComponents} onHover={setHover3d} />
+              <Preview key={loadId} xml={analysis.text} theme={theme} highlight={highlight} onComponents={onComponents} onHover={setHover3d} />
             </div>
           </div>
 
