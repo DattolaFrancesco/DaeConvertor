@@ -25,6 +25,4 @@ a partire dalla sezione 9 (le sezioni 1–8 restano intatte): una sezione "DIMEN
 spessore, con titolo, descrizione, spessore e pezzi h × l × qtà (h = lato lungo). Gli altri campi restano quelli del
 template. Oltre la sezione 10 ne vengono create di nuove copiando la 10, e vengono aggiunte al totale nel foglio "totali". Esclusi ferramenta,
 blocchi spessi, superfici senza spessore e accessori. Logica in `lib/preventivo.ts`.
-
-Il template contiene prezzi riservati e **non è incluso nella repo**: per usare l'export copia il tuo
-file PREVENTIVI in `public/templates/preventivo-template.xlsx`.
+Il template fa parte del progetto: per cambiarlo sostituisci quel file.

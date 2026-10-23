@@ -98,7 +98,7 @@ export default function Home() {
     setExportMsg(null);
     try {
       const res = await fetch("/templates/preventivo-template.xlsx");
-      if (!res.ok) throw new Error("Template Excel non trovato: copia il file PREVENTIVI in public/templates/preventivo-template.xlsx");
+      if (!res.ok) throw new Error("Template Excel non trovato (public/templates/preventivo-template.xlsx)");
       const { data, sections, warnings } = await buildPreventivo(await res.arrayBuffer(), components);
       const blob = new Blob([data as BlobPart], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

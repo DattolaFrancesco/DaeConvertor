@@ -4,6 +4,4 @@ next-env.d.ts
 *.tsbuildinfo
 .DS_Store
 
-# Template preventivo con prezzi riservati: resta solo in locale
-public/templates/*.xlsx
 .idea
